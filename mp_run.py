@@ -23,8 +23,8 @@ def rf_feature_importance(ts_train_X, ts_train_y, perturbation_input, perturbati
 
 
 def regr_perturbation(ts_train_X, ts_train_y, perturbation_input, perturbation_input_alt, i):
-    # regr = XGBRegressor(random_state=i, n_jobs=1)
-    regr = RandomForestRegressor(random_state=i, n_jobs=1)
+    regr = XGBRegressor(random_state=i, n_jobs=1)
+    # regr = RandomForestRegressor(random_state=i, n_jobs=1)
     # regr = XGBRFRegressor(random_state=i, n_jobs=1)
     # regr = AdaBoostRegressor(random_state=i)
     regr = regr.fit(ts_train_X, ts_train_y)
