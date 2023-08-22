@@ -28,6 +28,13 @@ class MpCalc:
         scores = cross_val_score(xb_regr, self.X.T, y, cv=5)
         return np.mean(scores)
     
+    def all_linear_calc(self, index):
+        target = self.target_gene_list[index]
+        y = self.target_exp.loc[target]
+        regr = LinearRegression()
+        scores = cross_val_score(regr, self.X.T, y, cv=5)
+        return np.mean(scores)
+    
     def network_v_model(self, index):
         target = self.target_gene_list[index]
         y = self.target_exp.loc[target]
