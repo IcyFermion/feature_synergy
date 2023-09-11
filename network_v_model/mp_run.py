@@ -88,4 +88,37 @@ class MpCalc:
             network_rf_regr.score(self.test_source.loc[tf_list].T, y_test)
             ])
     
+    def full_comp(self, index):
+        target = self.target_gene_list[index]
+        tf_list = self.network_df.loc[target].tf_list
+        tf_list = tf_list.split('; ')
+        y_train = self.train_target.loc[target]
+        y_test = self.test_target.loc[target]
+        rf_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+        gs_rf_regr = RandomForestRegressor(random_state=43, n_jobs=1, max_features='sqrt' )
+        linear_regr = LinearRegression()
+        gs_linear_regr = LinearRegression()
+        rf_regr.fit(self.train_source.T, y_train)
+        gs_rf_regr.fit(self.train_source.loc[tf_list].T, y_train)
+        linear_regr.fit(self.train_source.T, y_train)
+        gs_linear_regr.fit(self.train_source.loc[tf_list].T, y_train)
+        
+        top_rf_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(rf_regr.feature_importances_)[-10:]])
+        top_linear_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(np.abs(linear_regr.coef_))[-10:]])
+        
+        new_rf_regr = RandomForestRegressor(random_state=44, n_jobs=1, max_features='sqrt' )
+        new_linear_regr = LinearRegression()
+        new_rf_regr.fit(self.train_source.loc[top_linear_tf_list].T, y_train)
+        new_linear_regr.fit(self.train_source.loc[top_rf_tf_list].T, y_train)
+        
+        return np.array([
+            rf_regr.score(self.test_source.T, y_test), 
+            linear_regr.score(self.test_source.T, y_test),
+            gs_rf_regr.score(self.test_source.loc[tf_list].T, y_test),
+            gs_linear_regr.score(self.test_source.loc[tf_list].T, y_test),
+            new_rf_regr.score(self.test_source.loc[top_linear_tf_list].T, y_test),
+            new_linear_regr.score(self.test_source.loc[top_rf_tf_list].T, y_test),
+        ])
+        
+        
 
