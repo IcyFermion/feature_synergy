@@ -134,3 +134,5 @@ dmypy.json
 # data and output directory
 /data
 /output
+/network_v_model/plot_output
+/network_v_model/*.csv

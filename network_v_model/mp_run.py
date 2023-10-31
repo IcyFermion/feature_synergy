@@ -1,10 +1,15 @@
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import AdaBoostRegressor
 from sklearn.linear_model import LinearRegression
+from sklearn import linear_model
 import numpy as np
 from xgboost import XGBRegressor
 from xgboost import XGBRFRegressor
 from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import explained_variance_score, mean_squared_error
+
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import Pipeline
 
 import warnings
 from sklearn.exceptions import DataConversionWarning
@@ -20,6 +25,23 @@ class MpCalc:
         self.train_target = train_target
         self.test_source = test_source
         self.test_target = test_target
+        self.available_tfs = set(X.index)
+
+    def get_train_test_sets(self, index):
+        target = self.target_gene_list[index]
+        tf_list = self.network_df.loc[target].tf_list
+        tf_list = tf_list.split('; ')
+        tf_list = list(self.available_tfs.intersection(tf_list))
+        if target in tf_list: tf_list.remove(target)
+        if target in self.train_source.index:
+            train_X = self.train_source.drop([target])
+            test_X = self.test_source.drop([target])
+        else:
+            train_X = self.train_source
+            test_X = self.test_source
+        y_train = self.train_target.loc[target]
+        y_test = self.test_target.loc[target]
+        return train_X, test_X, y_train, y_test, tf_list
     
     def calc(self, index):
         target = self.target_gene_list[index]
@@ -70,6 +92,7 @@ class MpCalc:
         target = self.target_gene_list[index]
         tf_list = self.network_df.loc[target].tf_list
         tf_list = tf_list.split('; ')
+        tf_list = list(self.available_tfs.intersection(tf_list))
         y_train = self.train_target.loc[target]
         y_test = self.test_target.loc[target]
         rf_regr = RandomForestRegressor(random_state=42, n_jobs=1)
@@ -88,37 +111,138 @@ class MpCalc:
             network_rf_regr.score(self.test_source.loc[tf_list].T, y_test)
             ])
     
+    
     def full_comp(self, index):
-        target = self.target_gene_list[index]
-        tf_list = self.network_df.loc[target].tf_list
-        tf_list = tf_list.split('; ')
-        y_train = self.train_target.loc[target]
-        y_test = self.test_target.loc[target]
+        train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
         rf_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
         gs_rf_regr = RandomForestRegressor(random_state=43, n_jobs=1, max_features='sqrt' )
-        linear_regr = LinearRegression()
-        gs_linear_regr = LinearRegression()
-        rf_regr.fit(self.train_source.T, y_train)
-        gs_rf_regr.fit(self.train_source.loc[tf_list].T, y_train)
-        linear_regr.fit(self.train_source.T, y_train)
-        gs_linear_regr.fit(self.train_source.loc[tf_list].T, y_train)
+        linear_regr = linear_model.Ridge()
+        gs_linear_regr = linear_model.Ridge()
+        rf_regr.fit(train_X.T, y_train)
+        gs_rf_regr.fit(train_X.loc[tf_list].T, y_train)
+        linear_regr.fit(train_X.T, y_train)
+        gs_linear_regr.fit(train_X.loc[tf_list].T, y_train)
         
         top_rf_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(rf_regr.feature_importances_)[-10:]])
         top_linear_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(np.abs(linear_regr.coef_))[-10:]])
         
         new_rf_regr = RandomForestRegressor(random_state=44, n_jobs=1, max_features='sqrt' )
-        new_linear_regr = LinearRegression()
-        new_rf_regr.fit(self.train_source.loc[top_linear_tf_list].T, y_train)
-        new_linear_regr.fit(self.train_source.loc[top_rf_tf_list].T, y_train)
+        new_linear_regr = linear_model.Ridge()
+        new_rf_regr.fit(train_X.loc[top_linear_tf_list].T, y_train)
+        new_linear_regr.fit(train_X.loc[top_rf_tf_list].T, y_train)
         
         return np.array([
-            rf_regr.score(self.test_source.T, y_test), 
-            linear_regr.score(self.test_source.T, y_test),
-            gs_rf_regr.score(self.test_source.loc[tf_list].T, y_test),
-            gs_linear_regr.score(self.test_source.loc[tf_list].T, y_test),
-            new_rf_regr.score(self.test_source.loc[top_linear_tf_list].T, y_test),
-            new_linear_regr.score(self.test_source.loc[top_rf_tf_list].T, y_test),
+            rf_regr.score(test_X.T, y_test), 
+            linear_regr.score(test_X.T, y_test),
+            gs_rf_regr.score(test_X.loc[tf_list].T, y_test),
+            gs_linear_regr.score(test_X.loc[tf_list].T, y_test),
+            new_rf_regr.score(test_X.loc[top_linear_tf_list].T, y_test),
+            new_linear_regr.score(test_X.loc[top_rf_tf_list].T, y_test),
+            mean_squared_error(rf_regr.predict(test_X.T), y_test, squared=False),
+            mean_squared_error(linear_regr.predict(test_X.T), y_test, squared=False),
+            mean_squared_error(gs_rf_regr.predict(test_X.loc[tf_list].T), y_test, squared=False),
+            mean_squared_error(gs_linear_regr.predict(test_X.loc[tf_list].T), y_test, squared=False),
+            mean_squared_error(new_rf_regr.predict(test_X.loc[top_linear_tf_list].T), y_test, squared=False),
+            mean_squared_error(new_linear_regr.predict(test_X.loc[top_rf_tf_list].T), y_test, squared=False),
         ])
+    
+    def top_feature_num(self, index):
+        train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
+        rf_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+        linear_regr = linear_model.Ridge()
+        rf_regr.fit(train_X.T, y_train)
+        linear_regr.fit(train_X.T, y_train)
+        rf_presum_feature_importance = np.cumsum(np.flip(np.sort(rf_regr.feature_importances_)))
+        linear_feature_importance = np.abs(linear_regr.coef_) / np.sum(np.abs(linear_regr.coef_))
+        linear_presum_feature_importance = np.cumsum(np.flip(np.sort(linear_feature_importance)))
+
+        rf_top_feature_num = np.argmax(np.cumsum(rf_presum_feature_importance)>0.95) + 1
+        linear_top_feature_num = np.argmax(np.cumsum(linear_presum_feature_importance)>0.95) + 1
         
+        return np.array([rf_top_feature_num, linear_top_feature_num])
+
+    def top_feature_model(self, index):
+        train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
+        rf_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+        linear_regr = linear_model.Ridge()
+        rf_regr.fit(train_X.T, y_train)
+        linear_regr.fit(train_X.T, y_train)
+        rf_presum_feature_importance = np.cumsum(np.flip(np.sort(rf_regr.feature_importances_)))
+        linear_feature_importance = np.abs(linear_regr.coef_) / np.sum(np.abs(linear_regr.coef_))
+        linear_presum_feature_importance = np.cumsum(np.flip(np.sort(linear_feature_importance)))
+
+        rf_top_feature_num = np.argmax(np.cumsum(rf_presum_feature_importance)>0.95) + 1
+        linear_top_feature_num = np.argmax(np.cumsum(linear_presum_feature_importance)>0.95) + 1
+        
+        top_rf_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(rf_regr.feature_importances_)[-rf_top_feature_num:]])
+        top_linear_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(np.abs(linear_regr.coef_))[-linear_top_feature_num:]])
+
+        new_rf_regr = RandomForestRegressor(random_state=44, n_jobs=1, max_features='sqrt' )
+        new_linear_regr = linear_model.Ridge()
+        new_rf_regr.fit(train_X.loc[top_rf_tf_list].T, y_train)
+        new_linear_regr.fit(train_X.loc[top_linear_tf_list].T, y_train)
+        
+        return np.array([
+            new_rf_regr.score(test_X.loc[top_rf_tf_list].T, y_test),
+            new_linear_regr.score(test_X.loc[top_linear_tf_list].T, y_test),
+            mean_squared_error(new_rf_regr.predict(test_X.loc[top_rf_tf_list].T), y_test, squared=False),
+            mean_squared_error(new_linear_regr.predict(test_X.loc[top_linear_tf_list].T), y_test, squared=False),
+        ])
+
+    def feature_overlap(self, index):
+        train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
+        rf_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+        linear_regr = linear_model.Ridge()
+        rf_regr.fit(train_X.T, y_train)
+        linear_regr.fit(train_X.T, y_train)
+        rf_presum_feature_importance = np.cumsum(np.flip(np.sort(rf_regr.feature_importances_)))
+        linear_feature_importance = np.abs(linear_regr.coef_) / np.sum(np.abs(linear_regr.coef_))
+        linear_presum_feature_importance = np.cumsum(np.flip(np.sort(linear_feature_importance)))
+
+        rf_top_feature_num = np.argmax(np.cumsum(rf_presum_feature_importance)>0.95) + 1
+        linear_top_feature_num = np.argmax(np.cumsum(linear_presum_feature_importance)>0.95) + 1
+        
+        top_rf_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(rf_regr.feature_importances_)[-rf_top_feature_num:]])
+        top_linear_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(np.abs(linear_regr.coef_))[-linear_top_feature_num:]])
+
+        top_rf_feature_gs_overlap_num = len(set(top_rf_tf_list).intersection(set(tf_list)))
+        top_linear_feature_gs_overlap_num = len(set(top_linear_tf_list).intersection(set(tf_list)))
+        top_linear_rf_feature_overlap_num = len(set(top_linear_tf_list).intersection(set(top_rf_tf_list)))
+
+        return np.array([top_rf_feature_gs_overlap_num, top_linear_feature_gs_overlap_num, top_linear_rf_feature_overlap_num, len(tf_list)])
+    
+
+    def all_linear_comp(self, index):
+        target = self.target_gene_list[index]
+        tf_list = self.network_df.loc[target].tf_list
+        tf_list = tf_list.split('; ')
+        tf_list = list(self.available_tfs.intersection(tf_list))
+        y_train = self.train_target.loc[target]
+        y_test = self.test_target.loc[target]
+        X_train = self.train_source.T
+        X_test = self.test_source.T
+        X_train_gs = self.train_source.loc[tf_list].T
+        X_test_gs = self.test_source.loc[tf_list].T
+
+        regr_models = [
+            linear_model.LinearRegression(),
+            linear_model.Ridge(),
+            linear_model.Lasso(),
+            linear_model.ElasticNet(),
+            linear_model.BayesianRidge(),
+            linear_model.QuantileRegressor(),
+            Pipeline([('quadratic', PolynomialFeatures(2)), ('linear', linear_model.LinearRegression())])
+        ]
+
+        res = []
+        for regr in regr_models:
+            regr.fit(X_train, y_train)
+            res.append(regr.score(X_test, y_test))
+
+        for regr in regr_models:
+            regr.fit(X_train_gs, y_train)
+            res.append(regr.score(X_test_gs, y_test))
+
+        return np.array(res)
         
 
