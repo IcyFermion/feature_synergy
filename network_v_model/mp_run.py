@@ -146,6 +146,68 @@ class MpCalc:
             mean_squared_error(new_linear_regr.predict(test_X.loc[top_rf_tf_list].T), y_test, squared=False),
         ])
     
+    def full_comp_new(self, index):
+        train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
+        rf_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+        gs_rf_regr = RandomForestRegressor(random_state=43, n_jobs=1, max_features='sqrt' )
+        linear_regr = linear_model.Ridge()
+        gs_linear_regr = linear_model.Ridge()
+        rf_regr.fit(train_X.T, y_train)
+        gs_rf_regr.fit(train_X.loc[tf_list].T, y_train)
+        linear_regr.fit(train_X.T, y_train)
+        gs_linear_regr.fit(train_X.loc[tf_list].T, y_train)
+        
+        rf_presum_feature_importance = np.cumsum(np.flip(np.sort(rf_regr.feature_importances_)))
+        linear_feature_importance = np.abs(linear_regr.coef_) / np.sum(np.abs(linear_regr.coef_))
+        linear_presum_feature_importance = np.cumsum(np.flip(np.sort(linear_feature_importance)))
+
+        rf_top_feature_num = np.argmax(np.cumsum(rf_presum_feature_importance)>0.95) + 1
+        linear_top_feature_num = np.argmax(np.cumsum(linear_presum_feature_importance)>0.95) + 1
+        
+        top_rf_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(rf_regr.feature_importances_)[-rf_top_feature_num:]])
+        top_linear_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(np.abs(linear_regr.coef_))[-linear_top_feature_num:]])
+        
+        new_rf_regr = RandomForestRegressor(random_state=44, n_jobs=1, max_features='sqrt' )
+        new_linear_regr = linear_model.Ridge()
+        new_rf_regr.fit(train_X.loc[top_linear_tf_list].T, y_train)
+        new_linear_regr.fit(train_X.loc[top_rf_tf_list].T, y_train)
+        
+        top_rf_regr = RandomForestRegressor(random_state=45, n_jobs=1, max_features='sqrt' )
+        top_linear_regr = linear_model.Ridge()
+        top_rf_regr.fit(train_X.loc[top_rf_tf_list].T, y_train)
+        top_linear_regr.fit(train_X.loc[top_linear_tf_list].T, y_train)
+        
+        top_rf_feature_gs_overlap_num = len(set(top_rf_tf_list).intersection(set(tf_list)))
+        top_linear_feature_gs_overlap_num = len(set(top_linear_tf_list).intersection(set(tf_list)))
+        top_linear_rf_feature_overlap_num = len(set(top_linear_tf_list).intersection(set(top_rf_tf_list)))
+        
+        return np.array([
+            rf_regr.score(test_X.T, y_test), 
+            linear_regr.score(test_X.T, y_test),
+            gs_rf_regr.score(test_X.loc[tf_list].T, y_test),
+            gs_linear_regr.score(test_X.loc[tf_list].T, y_test),
+            new_rf_regr.score(test_X.loc[top_linear_tf_list].T, y_test),
+            new_linear_regr.score(test_X.loc[top_rf_tf_list].T, y_test),
+            mean_squared_error(rf_regr.predict(test_X.T), y_test, squared=False),
+            mean_squared_error(linear_regr.predict(test_X.T), y_test, squared=False),
+            mean_squared_error(gs_rf_regr.predict(test_X.loc[tf_list].T), y_test, squared=False),
+            mean_squared_error(gs_linear_regr.predict(test_X.loc[tf_list].T), y_test, squared=False),
+            mean_squared_error(new_rf_regr.predict(test_X.loc[top_linear_tf_list].T), y_test, squared=False),
+            mean_squared_error(new_linear_regr.predict(test_X.loc[top_rf_tf_list].T), y_test, squared=False),
+            top_rf_regr.score(test_X.loc[top_rf_tf_list].T, y_test),
+            top_linear_regr.score(test_X.loc[top_linear_tf_list].T, y_test),
+            mean_squared_error(top_rf_regr.predict(test_X.loc[top_rf_tf_list].T), y_test, squared=False),
+            mean_squared_error(top_linear_regr.predict(test_X.loc[top_linear_tf_list].T), y_test, squared=False),
+            rf_top_feature_num, 
+            linear_top_feature_num,
+            top_rf_feature_gs_overlap_num, 
+            top_linear_feature_gs_overlap_num, 
+            top_linear_rf_feature_overlap_num, 
+            len(tf_list),
+            y_test.var(),
+            y_test.std()
+        ])
+    
     def top_feature_num(self, index):
         train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
         rf_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
