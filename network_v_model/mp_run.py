@@ -149,9 +149,6 @@ class MpCalc:
             if (s < 0) and (p < 0.05):
                 continue_flag = False
                 break
-            if (half_feature_num < 4):
-                continue_flag = False
-                break
             feature_list = top_half_features
             current_rmse = mean_squared_error(
                 current_regr.predict(current_test_X.T),
@@ -161,21 +158,74 @@ class MpCalc:
                 current_feature_importance = current_regr.feature_importances_
             else:
                 current_feature_importance = np.abs(current_regr.coef_) / np.sum(np.abs(current_regr.coef_))
+            
+            if (len(feature_list) < 4):
+                continue_flag = False
+                break
         
         complementary_features = train_X.index.difference(feature_list)
         if (len(complementary_features) > 0):
             if (regr_type == 'rf'):
-                complementary_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+                current_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
             else:
-                complementary_regr = linear_model.Ridge()
-            complementary_regr.fit(train_X.loc[complementary_features].T, y_train)
-            complementary_rmse = mean_squared_error(
-                complementary_regr.predict(test_X.loc[complementary_features].T),
-                y_test, squared=False
-            )
-        else: complementary_rmse = np.sqrt(np.mean(base_error))
+                current_regr = linear_model.Ridge()
+            current_regr.fit(train_X.loc[complementary_features].T, y_train)
+            current_error = np.square(current_regr.predict(test_X.loc[complementary_features].T)-y_test)
+            if (regr_type == 'rf'):
+                current_feature_importance = current_regr.feature_importances_
+            else:
+                current_feature_importance = np.abs(current_regr.coef_) / np.sum(np.abs(current_regr.coef_))
+            s, p = stats.ttest_rel(base_error, current_error)
+            if (s < 0) and (p < 0.05):
+                continue_flag = False
+                complementary_rmse = np.iinfo(np.int16).max
+            else:
+                continue_flag = True
+                complementary_rmse = mean_squared_error(
+                    current_regr.predict(test_X.loc[complementary_features].T),
+                    y_test, squared=False
+                )
+            while (continue_flag):
+                half_feature_num = int(len(complementary_features)/2)
+                top_half_features = complementary_features[np.argsort(current_feature_importance)[-1*half_feature_num:]]
+                current_train_X = train_X.loc[top_half_features]
+                current_test_X = test_X.loc[top_half_features]
+                if (regr_type == 'rf'):
+                    current_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+                else:
+                    current_regr = linear_model.Ridge()
+                current_regr.fit(current_train_X.T, y_train)
+                current_error = np.square(current_regr.predict(current_test_X.T)-y_test)
+                s, p = stats.ttest_rel(base_error, current_error)
+                if (s < 0) and (p < 0.05):
+                    continue_flag = False
+                    break
+                complementary_features = top_half_features
+                complementary_rmse = mean_squared_error(
+                    current_regr.predict(current_test_X.T),
+                    y_test, squared=False
+                )
+                if (regr_type == 'rf'):
+                    current_feature_importance = current_regr.feature_importances_
+                else:
+                    current_feature_importance = np.abs(current_regr.coef_) / np.sum(np.abs(current_regr.coef_))
+                
+                if (len(complementary_features) < 4):
+                    continue_flag = False
+                    break
+        else: complementary_rmse = np.iinfo(np.int16).max
+
+        feature_list_index = [train_X.index.get_loc(feature) for feature in feature_list]
+        complementary_features_index = [train_X.index.get_loc(feature) for feature in complementary_features]
             
-        return np.array([len(feature_list), current_rmse, complementary_rmse])
+        return np.array([
+            len(feature_list), 
+            len(complementary_features), 
+            current_rmse, 
+            complementary_rmse, 
+            '; '.join(str(v) for v in feature_list_index),
+            '; '.join(str(v) for v in complementary_features_index)
+            ])
     
     def efron_process_90th_rf(self, index):
         return(self.efron_process_90th(index, 'rf'))
@@ -238,8 +288,80 @@ class MpCalc:
                 y_test, squared=False
             )
         else: complementary_rmse = np.sqrt(np.mean(base_error))
-            
         return np.array([len(feature_list), current_rmse, complementary_rmse])
+    
+    def dynamic_efron_rf(self, index):
+        return(self.dynamic_efron(index, 'rf'))
+    def dynamic_efron_linear(self, index):
+        return(self.dynamic_efron(index, 'linear'))
+    
+    def dynamic_efron(self, index, regr_type):
+        train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
+        if (regr_type == 'rf'):
+            regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+        else:
+            regr = linear_model.Ridge()
+        regr.fit(train_X.T, y_train)
+        base_error = np.square(regr.predict(test_X.T)-y_test)
+        feature_list = train_X.index
+        if (regr_type == 'rf'):
+            base_feature_importance = regr.feature_importances_
+        else:
+            base_feature_importance = np.abs(regr.coef_) / np.sum(np.abs(regr.coef_))
+        
+        current_rmse = mean_squared_error(
+            regr.predict(test_X.T),
+            y_test, squared=False
+        )
+        current_feature_importance = base_feature_importance
+        base_feature_importance_presum = np.cumsum(base_feature_importance)
+        continue_flag = True
+        top_feature_percent = 0.99
+        current_feature_list = feature_list
+        while(continue_flag):
+            top_feature_num = np.argmax(base_feature_importance_presum>=top_feature_percent) + 1
+            top_features = feature_list[np.argsort(base_feature_importance)[-1*top_feature_num:]]
+            current_train_X = train_X.loc[top_features]
+            current_test_X = test_X.loc[top_features]
+            if (regr_type == 'rf'):
+                current_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+            else:
+                current_regr = linear_model.Ridge()
+            current_regr.fit(current_train_X.T, y_train)
+            current_error = np.square(current_regr.predict(current_test_X.T)-y_test)
+            s, p = stats.ttest_rel(base_error, current_error)
+            if (s < 0) and (p < 0.05):
+                continue_flag = False
+                break
+            current_feature_list = top_features
+            current_rmse = mean_squared_error(
+                current_regr.predict(current_test_X.T),
+                y_test, squared=False
+            )
+            top_feature_percent -= 0.01
+            if (len(current_feature_list) < 4):
+                continue_flag = False
+                break
+
+        top_feature_percent += 0.01
+        top_feature_num = np.argmax(base_feature_importance_presum>=top_feature_percent) + 1
+        top_features = feature_list[np.argsort(base_feature_importance)[-1*top_feature_num:]]
+        current_feature_index = np.argsort(base_feature_importance)[-1*top_feature_num:]
+        
+        complementary_features = train_X.index.difference(current_feature_list)
+        if (len(complementary_features) > 0):
+            if (regr_type == 'rf'):
+                complementary_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+            else:
+                complementary_regr = linear_model.Ridge()
+            complementary_regr.fit(train_X.loc[complementary_features].T, y_train)
+            complementary_rmse = mean_squared_error(
+                complementary_regr.predict(test_X.loc[complementary_features].T),
+                y_test, squared=False
+            )
+        else: complementary_rmse = np.sqrt(np.mean(base_error))
+
+        return np.array([len(current_feature_list), current_rmse, complementary_rmse, '; '.join(str(v) for v in current_feature_index)])
 
     
     def full_comp_new(self, index):
@@ -257,8 +379,10 @@ class MpCalc:
         linear_feature_importance = np.abs(linear_regr.coef_) / np.sum(np.abs(linear_regr.coef_))
         linear_presum_feature_importance = np.cumsum(np.flip(np.sort(linear_feature_importance)))
 
-        rf_top_feature_num = np.argmax(np.cumsum(rf_presum_feature_importance)>0.95) + 1
-        linear_top_feature_num = np.argmax(np.cumsum(linear_presum_feature_importance)>0.95) + 1
+        rf_top_feature_num = np.argmax(rf_presum_feature_importance>0.95) + 1
+        rf_top_feature_num = 20
+        linear_top_feature_num = np.argmax(linear_presum_feature_importance>0.95) + 1
+        linear_top_feature_num = 20
         
         top_rf_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(rf_regr.feature_importances_)[-rf_top_feature_num:]])
         top_linear_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(np.abs(linear_regr.coef_))[-linear_top_feature_num:]])
