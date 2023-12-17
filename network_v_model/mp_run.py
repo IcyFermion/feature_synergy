@@ -263,9 +263,9 @@ class MpCalc:
             ])
     
     def efron_process_rf_training(self, index):
-        return self.efron_process(index, 'rf')
+        return self.efron_process_training(index, 'rf')
     def efron_process_linear_training(self, index):
-        return self.efron_process(index, 'linear')
+        return self.efron_process_training(index, 'linear')
 
     def efron_process_training(self, index, regr_type):
         train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
