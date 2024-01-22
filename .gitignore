@@ -131,7 +131,6 @@ dmypy.json
 .DS_Store
 
 /.vscode
-/.vscode1
 
 # data and output directory
 # /data
