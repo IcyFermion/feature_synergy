@@ -57,7 +57,7 @@ import sys
 ######################################
 
 input_file = "MeanConf.vals"
-conf_interval = 0.9
+conf_interval = 0.95
     
 ######################################
 #

@@ -704,6 +704,19 @@ class MpCalc:
             top_rf_regr.score(test_X.loc[top_rf_tf_list].T, y_test),
             mean_squared_error(top_rf_regr.predict(test_X.loc[top_rf_tf_list].T), y_test, squared=False)
         ])
+    
+    def rf_top_10(self, index):
+        train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
+        rf_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
+        rf_regr.fit(train_X.T, y_train)
+        rf_top_feature_num = 10
+        top_rf_tf_list = np.flip(rf_regr.feature_names_in_[np.argsort(rf_regr.feature_importances_)[-rf_top_feature_num:]])
+        top_rf_regr = RandomForestRegressor(random_state=45, n_jobs=1, max_features='sqrt' )
+        top_rf_regr.fit(train_X.loc[top_rf_tf_list].T, y_train)
+        return np.array([
+            top_rf_regr.score(test_X.loc[top_rf_tf_list].T, y_test),
+            mean_squared_error(top_rf_regr.predict(test_X.loc[top_rf_tf_list].T), y_test, squared=False)
+        ])
 
     def full_comp_new(self, index):
         train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)

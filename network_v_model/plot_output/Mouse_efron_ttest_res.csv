@@ -1,0 +1,7 @@
+Model_A,Model_B,Mean Difference,95% Confidence Interval of Difference,p-value
+RF with Efron TFs(half shrink),RF with all TFs,0.00935,"(-0.00448, 0.0232)",0.184
+RF with Efron TFs(half shrink),RF with GS network,-0.288,"(-0.429, -0.147)",7.37e-05
+RF with Efron TFs(half shrink),RF with top TFs,-0.0614,"(-0.103, -0.0201)",0.00368
+RF with Efron TFs(half shrink),RF with Complementary Efron TFs(half shrink),0.00587,"(-0.0082, 0.02)",0.412
+RF with Efron TFs(half shrink),RF with Efron TFs(90%% shrink),0.00619,"(-0.0105, 0.0229)",0.466
+RF with Efron TFs(90%% shrink),RF with Complementary Efron TFs(90%% shrink),-0.00352,"(-0.0246, 0.0176)",0.743

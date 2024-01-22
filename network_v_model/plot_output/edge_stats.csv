@@ -1,0 +1,6 @@
+,Yeast,B.subtilis,Arabidopsis,Mouse
+Gold Standard Network,52.7$\pm$17.3,1.87$\pm$1.13,13.0$\pm$8.27,5.6$\pm$6.23
+Top Features From RF Regression,6.36$\pm$0.869,6.76$\pm$0.851,4.61$\pm$0.899,8.13$\pm$1.14
+Top Features From Linear Regression,8.54$\pm$1.1,8.31$\pm$0.943,5.91$\pm$0.635,11.9$\pm$1.9
+Overlap Between GS and RF Top Features,1.62$\pm$1.15,0.134$\pm$0.364,1.19$\pm$1.18,0.0548$\pm$0.228
+Overlap Between GS and Linear Top Features,2.56$\pm$1.35,0.225$\pm$0.443,1.32$\pm$1.28,0.181$\pm$0.508

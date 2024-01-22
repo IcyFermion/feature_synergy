@@ -1,0 +1,7 @@
+Model_A,Model_B,Mean Difference,95% Confidence Interval of Difference,p-value
+RF with all TFs,RF with GS network,-0.295,"(-0.45, -0.139)",0.000226
+LR with all TFs,LR with GS network,-0.381,"(-0.503, -0.259)",2.29e-09
+RF with all TFs,LR with all TFs,-0.11,"(-0.221, 0.000978)",0.052
+RF with GS network,LR with GS network,-0.196,"(-0.279, -0.113)",5.22e-06
+RF with all TFs,LR with GS network,-0.491,"(-0.671, -0.311)",1.6e-07
+RF with GS network,LR with all TFs,0.185,"(0.0961, 0.274)",5.37e-05
