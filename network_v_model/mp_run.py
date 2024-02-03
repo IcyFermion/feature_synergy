@@ -18,9 +18,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class MpCalc:
-    def __init__(self, target_gene_list, target_exp, X, network_df, train_source, train_target, test_source, test_target):
+    def __init__(self, target_gene_list, X, network_df, train_source, train_target, test_source, test_target):
         self.target_gene_list = target_gene_list
-        self.target_exp = target_exp
         self.X = X
         self.network_df = network_df
         self.train_source = train_source
@@ -44,52 +43,7 @@ class MpCalc:
         y_train = self.train_target.loc[target]
         y_test = self.test_target.loc[target]
         return train_X, test_X, y_train, y_test, tf_list
-    
-    def calc(self, index):
-        target = self.target_gene_list[index]
-        y = self.target_exp.loc[target]
-        xb_regr = RandomForestRegressor(random_state=42, n_jobs=1)
-        scores = cross_val_score(xb_regr, self.X.T, y, cv=5)
-        return np.mean(scores)
-    
-    def all_linear_calc(self, index):
-        target = self.target_gene_list[index]
-        y = self.target_exp.loc[target]
-        regr = LinearRegression()
-        scores = cross_val_score(regr, self.X.T, y, cv=5)
-        return np.mean(scores)
-    
-    def network_v_model(self, index):
-        target = self.target_gene_list[index]
-        y = self.target_exp.loc[target]
-        xb_regr = RandomForestRegressor(random_state=42, n_jobs=1)
-        # xb_regr = xgb.XGBRegressor(random_state=42, n_jobs=1)
-        linear_regr = LinearRegression()
-        linear_scores = []
-        tf_list = self.network_df.loc[target].tf_list
-        tf_list = tf_list.split('; ')
-        for tf in tf_list:
-            X_tf = self.X.loc[tf]
-            scores = cross_val_score(linear_regr, np.array([X_tf]).T, y, cv=5)
-            linear_scores.append(np.mean(scores))
-        model_cv_scores = cross_val_score(xb_regr, self.X.T, y, cv=5)
-
-        return np.array([np.max(linear_scores), np.mean(linear_scores), np.mean(model_cv_scores)])
-    
-    def network_all_v_model(self, index):
-        target = self.target_gene_list[index]
-        y = self.target_exp.loc[target]
-        xb_regr = RandomForestRegressor(random_state=42, n_jobs=1)
-        # xb_regr = xgb.XGBRegressor(random_state=42, n_jobs=1)
-        linear_regr = LinearRegression()
-        tf_list = self.network_df.loc[target].tf_list
-        tf_list = tf_list.split('; ')
-        X_tf = self.X.loc[tf_list]
-        linear_scores = cross_val_score(linear_regr, X_tf.T, y, cv=5)
-        model_cv_scores = cross_val_score(xb_regr, self.X.T, y, cv=5)
-
-        return np.array([np.mean(linear_scores), np.mean(model_cv_scores)])
-    
+        
     def lime_test(self, index):
         target = self.target_gene_list[index]
         tf_list = self.network_df.loc[target].tf_list
