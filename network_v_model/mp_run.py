@@ -792,7 +792,7 @@ class MpCalc:
         iter_length = len(target_gene_list)
         print('Comparing different regression approaches... ...')
         start_time = time.time()
-        print('Step 1 of 4:')
+        print('Step 1 of 3:')
         with Pool(cpu_count()) as p:
             r = list(tqdm(p.imap(self.full_comp_new, range(iter_length)), total=iter_length))
         r = np.array(r)
