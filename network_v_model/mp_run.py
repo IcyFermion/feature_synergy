@@ -1,3 +1,5 @@
+from tqdm import tqdm
+import time
 from sklearn import ensemble
 from sklearn.ensemble import RandomForestRegressor
 # from sklearn.ensemble import AdaBoostRegressor
@@ -5,6 +7,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.decomposition import PCA
 from sklearn import linear_model
 import numpy as np
+import pandas as pd
 # from xgboost import XGBRegressor
 # from xgboost import XGBRFRegressor
 from sklearn.model_selection import train_test_split, cross_val_score
@@ -14,6 +17,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import Pipeline
 from scipy import stats
 
+from multiprocessing import Pool, cpu_count
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -27,6 +31,7 @@ class MpCalc:
         self.test_source = test_source
         self.test_target = test_target
         self.available_tfs = set(X.index)
+        self.tf_list = list(train_source.index)
 
     def get_train_test_sets(self, index):
         target = self.target_gene_list[index]
@@ -672,8 +677,13 @@ class MpCalc:
             mean_squared_error(top_rf_regr.predict(test_X.loc[top_rf_tf_list].T), y_test, squared=False)
         ])
 
-    def full_comp_new(self, index):
+    def full_comp_new(self, index, debug=False):
         train_X, test_X, y_train, y_test, tf_list = self.get_train_test_sets(index)
+        if (debug):
+            print(train_X.shape)
+            print(test_X.shape)
+            print(y_train.shape)
+            print(y_test.shape)
         rf_regr = RandomForestRegressor(random_state=42, n_jobs=1, max_features='sqrt' )
         gs_rf_regr = RandomForestRegressor(random_state=43, n_jobs=1, max_features='sqrt' )
         linear_regr = linear_model.Ridge()
@@ -778,4 +788,88 @@ class MpCalc:
 
         return np.array(res)
         
+    def full_comp_runner(self, target_gene_list, species_name):
+        iter_length = len(target_gene_list)
+        print('Comparing different regression approaches... ...')
+        start_time = time.time()
+        print('Step 1 of 4:')
+        with Pool(cpu_count()) as p:
+            r = list(tqdm(p.imap(self.full_comp_new, range(iter_length)), total=iter_length))
+        r = np.array(r)
+        out_df = pd.DataFrame(index=target_gene_list)
+        out_df['rf_score'] = r[:, 0]
+        out_df['linear_score'] = r[:, 1]
+        out_df['gs_rf_score'] = r[:, 2]
+        out_df['gs_linear_score'] = r[:, 3]
+        out_df['rf_with_linear_top_features_score'] = r[:, 4]
+        out_df['linear_with_rf_top_features_score'] = r[:, 5]
+        out_df['rf_rmse'] = r[:, 6]
+        out_df['linear_rmse'] = r[:, 7]
+        out_df['gs_rf_rmse'] = r[:, 8]
+        out_df['gs_linear_rmse'] = r[:, 9]
+        out_df['rf_with_linear_top_features_rmse'] = r[:, 10]
+        out_df['linear_with_rf_top_features_rmse'] = r[:, 11]
+        out_df['rf_with_top_features_score'] = r[:, 12]
+        out_df['linear_with_top_features_score'] = r[:, 13]
+        out_df['rf_with_top_features_rmse'] = r[:, 14]
+        out_df['linear_with_top_features_rmse'] = r[:, 15]
+        out_df['rf_top_feature_num'] = r[:, 16]
+        out_df['linear_top_feature_num'] = r[:, 17]
+        out_df['rf_top_features_gs_overlap'] = r[:, 18]
+        out_df['linear_top_features_gs_overlap'] = r[:, 19]
+        out_df['rf_linear_top_features_overlap'] = r[:, 20]
+        out_df['gs_edge_num'] = r[:, 21]
+        out_df['test_var'] = r[:, 22]
+        out_df['test_std'] = r[:, 23]
+        out_df['pca_rf_score'] = r[:, 24]
+        out_df['pca_rf_rmse'] = r[:, 25]
 
+        print('Step 2 of 3:')
+        with Pool(cpu_count()) as p:
+            r = list(tqdm(p.imap(self.rf_top_tf_same_count_as_gs, range(iter_length)), total=iter_length))
+        r = np.array(r)
+        out_df['rf_top_tf_same_count_as_gs_score'] = r[:, 0]
+        out_df['rf_top_tf_same_count_as_gs_rmse'] = r[:, 1]
+        
+        print('Step 3 of 3:')
+        with Pool(cpu_count()) as p:
+            r = list(tqdm(p.imap(self.rf_top_10, range(iter_length)), total=iter_length))
+        r = np.array(r)
+        out_df['rf_top10_score'] = r[:, 0].astype('float64')
+        out_df['rf_top10_rmse'] = r[:, 1].astype('float64')
+
+        end_time = time.time()
+        print('Finished comparing all approaches, time elapsed: {} seconds'.format(end_time-start_time))
+
+        start_time = time.time()
+        print('Calculating minimal set and disjoint sets... ...')
+        print('Step 1 of 1:')
+        with Pool(cpu_count()) as p:
+            r = list(tqdm(p.imap(self.efron_process_rf_training, range(iter_length)), total=iter_length))
+        efron_r = np.array(r)
+        out_df['rf_efron_feature_num'] = efron_r[:, 0].astype('float64')
+        out_df['rf_efron_complementary_feature_num_list'] = efron_r[:, 1]
+        out_df['rf_efron_rmse'] = efron_r[:, 2].astype('float64')
+        out_df['rf_efron_complementary_rmse_list'] = efron_r[:, 3]
+        out_df['rf_efron_features'] = efron_r[:, 4]
+        out_df['rf_efron_complementary_features_list'] = efron_r[:, 5]
+        out_df['rf_efron_ensemble_rmse'] = efron_r[:, 6]
+
+        rf_efron_overlap_count = []
+        tf_list_df = pd.DataFrame(index=self.tf_list)
+        for target_gene in out_df.index:
+            gs_tf_list = self.network_df.loc[target_gene].tf_list
+            gs_tf_set = set(gs_tf_list.split('; '))
+            gs_tf_set = self.available_tfs.intersection(gs_tf_set)
+            if target_gene in gs_tf_set: gs_tf_set.remove(target_gene)
+            efron_tf_list = out_df.loc[target_gene]['rf_efron_features']
+            efron_tf_list = efron_tf_list.split('; ')
+            efron_tf_list = [int(i) for i in efron_tf_list]
+            efron_tf_list = tf_list_df.iloc[efron_tf_list].index
+            efron_tf_set = set(efron_tf_list)
+            rf_efron_overlap_count.append(len(efron_tf_set.intersection(gs_tf_set)))
+        out_df['rf_efron_overlap_count'] = rf_efron_overlap_count
+        end_time = time.time()
+        print('Finished calculating minimal set and disjoint sets, time elapsed: {} seconds'.format(end_time- start_time))
+
+        out_df.to_csv('../output/network_model/{}_full_results.csv.gz'.format(species_name), compression='gzip')
