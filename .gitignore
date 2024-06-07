@@ -137,3 +137,7 @@ dmypy.json
 # /output
 # /network_v_model/plot_output
 # /network_v_model/*.csv
+
+/network_v_model/*_random_comp.ipynb
+/output/network_model/*_random_comp.csv.gz
+
